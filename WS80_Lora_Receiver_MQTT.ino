@@ -30,7 +30,7 @@ WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
 // MQTT server info
-const char* mqttServer = "152.5xxxxxx";
+const char* mqttServer = "152.....";
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
@@ -43,16 +43,15 @@ float windSpeed = 0.0, windGust = 0.0, temperature = 0.0, humidity = 0.0, batVol
 String receivedPacket = "";
 
 // Flag to toggle MQTT
-bool mqttEnabled = true;
+bool mqttEnabled = false;
 
 // ==== FUNCTION DECLARATIONS ====
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 
-// ==== Setup ====
 void setup() {
     Serial.begin(115200);
-    pinMode(TX_PIN, OUTPUT);
-    pinMode(RX_PIN, INPUT_PULLUP);
+    delay(1000);  // important for stability
+
     Wire.begin(21, 22);
 
     if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -78,7 +77,7 @@ void setup() {
     Serial.println("LoRa Receiver Ready");
 
     WiFiManager wifiManager;
-    wifiManager.autoConnect("LoRa_Weather_Receiver");
+    wifiManager.autoConnect("KWind_LoRa_Receiver");
     Serial.println("WiFi connected");
 
     mqttClient.setServer(mqttServer, mqttPort);
@@ -165,7 +164,7 @@ void displayData(bool mqttEnabled) {
 // ==== Send Data to MQTT ====
 void sendDataToMQTT() {
     String payload = String("{\"model\": \"WS80_LoraReceiver\", ") +
-                     String("\"id\": \"l-receiver-kwind-1\", ") +
+                     String("\"id\": \"lora-receiver-KWind\", ") +
                      String("\"wind_dir_deg\": ") + String(windDir) + ", " +
                      String("\"wind_avg_m_s\": ") + String(windSpeed) + ", " +
                      String("\"wind_max_m_s\": ") + String(windGust) + ", " +
