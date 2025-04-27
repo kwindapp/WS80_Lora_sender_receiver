@@ -1,184 +1,112 @@
 #include <SPI.h>
-#include <Wire.h>
 #include <LoRa.h>
-#include "SSD1306.h"
-
-// **Flag to enable/disable OLED display**
-#define USE_DISPLAY true  
 
 // LoRa Configuration
-#define SCK     5    
-#define MISO    19   
-#define MOSI    27   
-#define SS      18   
-#define RST     23   
-#define DI0     26   
-#define BAND    868E6
+#define SCK     5    // LoRa SCK Pin
+#define MISO    19   // LoRa MISO Pin
+#define MOSI    27   // LoRa MOSI Pin
+#define SS      18   // LoRa SS Pin
+#define RST     23   // LoRa RST Pin
+#define DI0     26   // LoRa DIO0 Pin
+#define BAND    868E6 // LoRa frequency (868 MHz)
 
-// Wind data variables
-int windDir = 0;
-float windSpeed = 0.0, windGust = 0.0, temperature = 0.0, humidity = 0.0;
+// Struct to store parsed data
+struct SensorData {
+  int windDir = 0;
+  float windSpeed = 0.0;
+  float windGust = 0.0;
+  float temperature = 0.0;
+  float humidity = 0.0;
+  float batVoltage = 0.0;
+};
 
-// Define wind speed unit (choose between "ms" for meters per second or "knots" for knots)
-#define WIND_SPEED_UNIT "knots"  // Options: "ms" or "knots"
-
-#if USE_DISPLAY
-SSD1306 display(0x3c, 4, 15);  // OLED display setup
-#endif
-
-String serialBuffer = "";  // Buffer for incoming serial data
-unsigned long lastUpdateTime = 0;  
+SensorData dataToSend;  // Declare a global instance of SensorData
 
 void setup() {
-  Serial.begin(115200);  
-  Serial2.begin(115200, SERIAL_8N1, 1, 3);  
+  Serial.begin(115200);
+  SPI.begin(SCK, MISO, MOSI, SS);  // Initialize SPI for LoRa
+  LoRa.setPins(SS, RST, DI0);  // Set LoRa pins
 
-  SPI.begin(SCK, MISO, MOSI, SS);
-  LoRa.setPins(SS, RST, DI0);
-  
   if (!LoRa.begin(BAND)) {
     Serial.println("Starting LoRa failed!");
-    while (1);  
+    while (1);  // Halt if LoRa init fails
   }
-  
+
   Serial.println("LoRa Initialized");
-
-#if USE_DISPLAY
-  pinMode(16, OUTPUT);
-  digitalWrite(16, LOW);    
-  delay(50); 
-  digitalWrite(16, HIGH);
-
-  display.init();
-  display.flipScreenVertically();  
-  display.setFont(ArialMT_Plain_10);
-  display.display();
-  delay(1500);
-#endif
 }
 
 void loop() {
-  // Read incoming serial data from Serial2
-  while (Serial2.available()) {
-    char incomingByte = Serial2.read();
-    serialBuffer += incomingByte;
+  String serialData = "";  // Store incoming data from Serial
+
+  // Read incoming serial data (this could be from a sensor)
+  while (Serial.available()) {
+    char incomingByte = Serial.read();
+    serialData += incomingByte;
   }
 
-  // Debugging: Print raw incoming data to Serial Monitor
-  if (serialBuffer.length() > 0) {
-    Serial.print("Raw incoming data: ");
-    Serial.println(serialBuffer);  // Print the raw data received
+  // If there is data, parse it
+  if (serialData.length() > 0) {
+    parseData(serialData);  // Parse the received data
   }
 
-  // Check if data contains "SHT30" identifier for valid sensor data
-  if (serialBuffer.indexOf("SHT30") != -1) {
-    Serial.println("Valid data received: " + serialBuffer);  
-    parseData(serialBuffer);  // Parse the received data
-    serialBuffer = "";  // Clear the buffer after parsing
+  // Send the parsed data over LoRa (for testing purposes)
+  sendLoRaPacket();
 
-#if USE_DISPLAY
-    displayData();  // Display the parsed data on OLED
-#endif
-  }
-
-  // Send packet every 10 seconds (regardless of incoming data)
-  if (millis() - lastUpdateTime >= 10000) {
-    sendLoRaPacket();
-    lastUpdateTime = millis();  // Update the time of the last packet sent
-  }
+  delay(10000);  // Send data every 10 seconds (adjust as needed)
 }
 
+// ==== Parse Incoming Serial Data ====
 void parseData(String data) {
-  // Clean the data by removing extra spaces and unnecessary characters
-  data.trim();  // Removes leading/trailing whitespaces
+  data.trim();  // Clean the data
 
-  int valuePos;
+  // Parse specific values from the incoming data
+  if (data.indexOf("WindDir") != -1) dataToSend.windDir = getValue(data, "WindDir");
+  if (data.indexOf("WindSpeed") != -1) dataToSend.windSpeed = getValue(data, "WindSpeed") * 1.94384;  // Convert to knots
+  if (data.indexOf("WindGust") != -1) dataToSend.windGust = getValue(data, "WindGust") * 1.94384;  // Convert to knots
+  if (data.indexOf("Temperature") != -1) dataToSend.temperature = getValue(data, "Temperature");
+  if (data.indexOf("Humi") != -1) dataToSend.humidity = getValue(data, "Humi");
+  if (data.indexOf("BatVoltage") != -1) dataToSend.batVoltage = getValue(data, "BatVoltage");
 
-  // Extracting values for wind direction, speed, gust, temperature, and humidity
-  if (data.indexOf("WindDir") != -1) {
-    windDir = getValue(data, "WindDir");
-  }
-
-  if (data.indexOf("WindSpeed") != -1) {
-    windSpeed = getValue(data, "WindSpeed");
-    // Convert wind speed to knots if WIND_SPEED_UNIT is set to "knots"
-    if (String(WIND_SPEED_UNIT) == "knots") {
-      windSpeed = windSpeed * 1.94384;  // Convert m/s to knots
-    }
-  }
-
-  if (data.indexOf("WindGust") != -1) {
-    windGust = getValue(data, "WindGust");
-    // Convert wind gust to knots if WIND_SPEED_UNIT is set to "knots"
-    if (String(WIND_SPEED_UNIT) == "knots") {
-      windGust = windGust * 1.94384;  // Convert m/s to knots
-    }
-  }
-
-  if (data.indexOf("Temperature") != -1) {
-    temperature = getValue(data, "Temperature");
-  }
-
-  if (data.indexOf("Humi") != -1) {
-    humidity = getValue(data, "Humi");
-  }
-
-  // Debugging parsed values - print to Serial Monitor
-  Serial.println("Parsed Data:");
-  Serial.printf("WindDir: %d\n", windDir);
-  Serial.printf("WindSpeed: %.1f %s\n", windSpeed, WIND_SPEED_UNIT);  // Print the unit used
-  Serial.printf("WindGust: %.1f %s\n", windGust, WIND_SPEED_UNIT);  // Print the unit used
-  Serial.printf("Temp: %.1f C\n", temperature);
-  Serial.printf("Humi: %.1f %%\n", humidity);
+  // Print parsed values to Serial Monitor
+  Serial.println("\n📊 Parsed Data:");
+  Serial.printf("🌬 WindDir: %d°\n", dataToSend.windDir);
+  Serial.printf("💨 WindSpeed: %.1f knots\n", dataToSend.windSpeed);
+  Serial.printf("🌪 WindGust: %.1f knots\n", dataToSend.windGust);
+  Serial.printf("🌡 Temp: %.1f C\n", dataToSend.temperature);
+  Serial.printf("💧 Humi: %.1f %%\n", dataToSend.humidity);
+  Serial.printf("🔋 BatVoltage: %.2f V\n", dataToSend.batVoltage);
 }
 
-// Helper function to get the value from a string based on the key
+// ==== Extract Values from Serial String ====
 float getValue(String data, String key) {
-  int keyPos = data.indexOf(key);
+  int keyPos = data.indexOf(key);  // Find position of key in the data
   if (keyPos != -1) {
     int startPos = data.indexOf("=", keyPos) + 1;  // Find where the value starts
-    int endPos = data.indexOf("\n", startPos);  // Find where the value ends
-    String valueString = data.substring(startPos, endPos);
-    
-    // Remove any spaces and convert to the correct data type (float or int)
-    valueString.trim();
-    if (key == "Humi") {
-      return valueString.toFloat();  // Humidity is a float
-    } else {
-      return valueString.toFloat();  // Other values are floats as well
-    }
+    int endPos = data.indexOf("\n", startPos);  // Find where the value ends (newline character)
+    String valueString = data.substring(startPos, endPos);  // Extract the value string
+    valueString.trim();  // Remove any extra spaces
+    return valueString.toFloat();  // Convert the value string to a float
   }
-  return 0.0;  // If the key was not found, return a default value
+  return 0.0;  // If key is not found, return 0.0
 }
-
-#if USE_DISPLAY
-void displayData() {
-  display.clear();
-  display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.setFont(ArialMT_Plain_10);
-  
-  display.drawString(0, 0, "WindSpeed: " + String(windSpeed) + " " + String(WIND_SPEED_UNIT));
-  display.drawString(0, 15, "WindGust: " + String(windGust) + " " + String(WIND_SPEED_UNIT));
-  display.drawString(0, 30, "WindDir: " + String(windDir));
-  display.drawString(0, 45, "Temp: " + String(temperature) + " C");
-  //display.drawString(0, 60, "Humi: " + String(humidity) + " %");
-
-  display.display();
-}
-#endif
 
 void sendLoRaPacket() {
-  // Prepare and send data via LoRa every 10 seconds
+  // Prepare and send data over LoRa
   LoRa.beginPacket();
-  LoRa.print("WindDir: " + String(windDir));
-  LoRa.print(", WindSpeed: " + String(windSpeed));
-  LoRa.print(" " + String(WIND_SPEED_UNIT));  // Include the unit (m/s or knots)
-  LoRa.print(", WindGust: " + String(windGust));
-  LoRa.print(" " + String(WIND_SPEED_UNIT));  // Include the unit (m/s or knots)
-  LoRa.print(", Temp: " + String(temperature));
-  LoRa.print(", Humi: " + String(humidity));
+  LoRa.print("WindDir: " + String(dataToSend.windDir));
+  LoRa.print(", WindSpeed: " + String(dataToSend.windSpeed));
+  LoRa.print(" knots");
+  LoRa.print(", WindGust: " + String(dataToSend.windGust));
+  LoRa.print(" knots");
+  LoRa.print(", Temp: " + String(dataToSend.temperature));
+  LoRa.print(" C");
+  LoRa.print(", Humi: " + String(dataToSend.humidity));
+  LoRa.print(" %");
+  LoRa.print(", BatVoltage: " + String(dataToSend.batVoltage));
   LoRa.endPacket();
 
-  Serial.println("Sent packet: " + String(windDir) + ", " + String(windSpeed) + " " + String(WIND_SPEED_UNIT) +
-                  ", " + String(windGust) + " " + String(WIND_SPEED_UNIT) + ", " + String(temperature) + ", " + String(humidity));  // Debugging sent data
+  // Debug: Print the sent packet data
+  Serial.println("Sent LoRa Packet: ");
+  Serial.printf("WindDir: %d°, WindSpeed: %.1f knots, WindGust: %.1f knots, Temp: %.1f C, Humi: %.1f %%, BatVoltage: %.2f V\n",
+                dataToSend.windDir, dataToSend.windSpeed, dataToSend.windGust, dataToSend.temperature, dataToSend.humidity, dataToSend.batVoltage);
 }
