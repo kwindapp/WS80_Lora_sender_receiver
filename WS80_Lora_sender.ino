@@ -106,16 +106,6 @@ void parseData(String data) {
   if (data.indexOf("Temperature") != -1) dataToSend.temperature = getValue(data, "Temperature");
   if (data.indexOf("Humi") != -1) dataToSend.humidity = getValue(data, "Humi");
   if (data.indexOf("BatVoltage") != -1) dataToSend.batVoltage = getValue(data, "BatVoltage");
-
-  // Debug Print
-  Serial.println("\n📊 Parsed Data:");
-  Serial.printf("🌬 WindDir: %d°\n", dataToSend.windDir);
-  Serial.printf("💨 WindSpeed: %.1f m/s\n", dataToSend.windSpeed);  // Confirm in m/s
-  Serial.printf("🌪 WindGust: %.1f m/s\n", dataToSend.windGust);  // Confirm in m/s
-  Serial.printf("🌡 Temp: %.1f °C\n", dataToSend.temperature);
-  Serial.printf("💧 Humi: %.1f %%\n", dataToSend.humidity);
-  Serial.printf("🔋 BatVoltage: %.2f V\n", dataToSend.batVoltage);
-
   // Display on OLED if enabled
   if (displayEnabled) {
     displayData();
@@ -146,7 +136,14 @@ void sendLoRaPacket() {
   LoRa.print(", Humi: " + String(dataToSend.humidity) + " %");
   LoRa.print(", BatVoltage: " + String(dataToSend.batVoltage) + " V");
   LoRa.endPacket();
-
+// Debug Print
+  Serial.println("\n📊 Parsed Data:");
+  Serial.printf("🌬 WindDir: %d°\n", dataToSend.windDir);
+  Serial.printf("💨 WindSpeed: %.1f m/s\n", dataToSend.windSpeed);  // Confirm in m/s
+  Serial.printf("🌪 WindGust: %.1f m/s\n", dataToSend.windGust);  // Confirm in m/s
+  Serial.printf("🌡 Temp: %.1f °C\n", dataToSend.temperature);
+  Serial.printf("💧 Humi: %.1f %%\n", dataToSend.humidity);
+  Serial.printf("🔋 BatVoltage: %.2f V\n", dataToSend.batVoltage);
   Serial.println("📡 Sent LoRa Packet:");
   Serial.printf("WindDir: %d°, WindSpeed: %.1f m/s, WindGust: %.1f m/s, Temp: %.1f°C, Humi: %.1f%%, BatVoltage: %.2fV\n",
                 dataToSend.windDir, dataToSend.windSpeed, dataToSend.windGust, dataToSend.temperature, dataToSend.humidity, dataToSend.batVoltage);
