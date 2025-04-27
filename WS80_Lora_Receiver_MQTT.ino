@@ -6,6 +6,7 @@
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 
+// ==== LoRa Pins and Config ====
 #define SCK     5
 #define MISO    19
 #define MOSI    27
@@ -14,42 +15,51 @@
 #define DI0     26
 #define BAND    868E6
 
+// ==== Display Config ====
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define TEXT_SIZE 1
-#define CURSOR_Y_SPACING 10
 
-#define MQTT_SWITCH_PIN 4  // GPIO pin for the MQTT toggle switch
+// ==== Serial Pins ====
 #define TX_PIN 1
 #define RX_PIN 3
 
+// ==== Global Variables ====
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
-const char* mqttServer = "152.xxxxxxxx";
+
+// MQTT server info
+const char* mqttServer = "152.5xxxxxx";
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
 const char* mqttTopic = "weather/data/WS80_Lora";
 
 int windDir = 0;
-float windSpeed = 0.0, windGust = 0.0, temperature = 0.0, humidity = 0.0;
-#define WIND_SPEED_UNIT "knots"
+float windSpeed = 0.0, windGust = 0.0, temperature = 0.0, humidity = 0.0, batVoltage = 0.0;
+#define WIND_SPEED_UNIT "knt"
 
 String receivedPacket = "";
 
+// Flag to toggle MQTT
+bool mqttEnabled = true;
+
+// ==== FUNCTION DECLARATIONS ====
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+
+// ==== Setup ====
 void setup() {
     Serial.begin(115200);
-    pinMode(MQTT_SWITCH_PIN, INPUT_PULLUP);
     pinMode(TX_PIN, OUTPUT);
     pinMode(RX_PIN, INPUT_PULLUP);
     Wire.begin(21, 22);
-    
+
     if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Serial.println("SSD1306 allocation failed!");
         while (1);
     }
-    
+
     display.clearDisplay();
     display.setTextSize(TEXT_SIZE);
     display.setTextColor(WHITE);
@@ -75,13 +85,12 @@ void setup() {
     mqttClient.setCallback(mqttCallback);
 }
 
+// ==== Loop ====
 void loop() {
-    digitalWrite(TX_PIN, LOW);
-    bool mqttEnabled = digitalRead(RX_PIN) == LOW;
-    
     if (mqttEnabled && !mqttClient.connected()) {
         reconnectMQTT();
     }
+
     if (mqttEnabled) {
         mqttClient.loop();
     }
@@ -92,18 +101,22 @@ void loop() {
         while (LoRa.available()) {
             receivedPacket += (char)LoRa.read();
         }
-        
-        Serial.println("Received: " + receivedPacket);
+
+        Serial.println("Received LoRa Packet: " + receivedPacket);
         parseData(receivedPacket);
         displayData(mqttEnabled);
+
         if (mqttEnabled) {
             sendDataToMQTT();
         }
     }
 }
 
+// ==== Parse Incoming Data ====
 void parseData(String data) {
+    Serial.println("Parsing data: " + data);
     int valuePos;
+
     if ((valuePos = data.indexOf("WindDir: ")) != -1)
         windDir = data.substring(valuePos + 9).toInt();
     if ((valuePos = data.indexOf("WindSpeed: ")) != -1)
@@ -114,13 +127,23 @@ void parseData(String data) {
         temperature = data.substring(valuePos + 6).toFloat();
     if ((valuePos = data.indexOf("Humi: ")) != -1)
         humidity = data.substring(valuePos + 6).toFloat();
-    
-    if (String(WIND_SPEED_UNIT) == "knots") {
+    if ((valuePos = data.indexOf("BatVoltage: ")) != -1) {
+        int startPos = valuePos + 12; // skip "BatVoltage: "
+        int endPos = data.indexOf('V', startPos); // find 'V'
+        if (endPos == -1) endPos = data.length();
+        batVoltage = data.substring(startPos, endPos).toFloat();
+    }
+
+    if (String(WIND_SPEED_UNIT) == "knt") {
         windSpeed *= 1.94384;
         windGust *= 1.94384;
     }
+
+    Serial.printf("Parsed data: WindDir: %d, WindSpeed: %.1f, WindGust: %.1f, Temp: %.1f, Humi: %.1f, BatVoltage: %.2f\n",
+                  windDir, windSpeed, windGust, temperature, humidity, batVoltage);
 }
 
+// ==== Display Data on OLED ====
 void displayData(bool mqttEnabled) {
     display.clearDisplay();
     display.setTextSize(1);
@@ -130,14 +153,16 @@ void displayData(bool mqttEnabled) {
     display.printf("WindGust: %.1f %s\n", windGust, WIND_SPEED_UNIT);
     display.setCursor(0, 30);
     display.printf("WindDir: %d\n", windDir);
-    display.setCursor(0, 45);
+    display.setCursor(0, 42);
     display.printf("Temp: %.1f C\n", temperature);
+    display.setCursor(60, 55);
+    display.printf("Bat: %.2f V\n", batVoltage);
     display.setCursor(0, 55);
     display.printf("MQTT: %s\n", mqttEnabled ? "ON" : "OFF");
     display.display();
 }
 
-// check wind m_s or knots = *1.94384
+// ==== Send Data to MQTT ====
 void sendDataToMQTT() {
     String payload = String("{\"model\": \"WS80_LoraReceiver\", ") +
                      String("\"id\": \"l-receiver-kwind-1\", ") +
@@ -145,7 +170,8 @@ void sendDataToMQTT() {
                      String("\"wind_avg_m_s\": ") + String(windSpeed) + ", " +
                      String("\"wind_max_m_s\": ") + String(windGust) + ", " +
                      String("\"temperature_C\": ") + String(temperature) + ", " +
-                     String("\"Humi\": ") + String(humidity) + "}";
+                     String("\"humidity\": ") + String(humidity) + ", " +
+                     String("\"battery_V\": ") + String(batVoltage) + "}";
 
     if (mqttClient.publish(mqttTopic, payload.c_str())) {
         Serial.println("Data sent to MQTT successfully.");
@@ -154,6 +180,7 @@ void sendDataToMQTT() {
     }
 }
 
+// ==== Reconnect MQTT if Disconnected ====
 void reconnectMQTT() {
     while (!mqttClient.connected()) {
         Serial.print("Attempting MQTT connection...");
@@ -167,5 +194,7 @@ void reconnectMQTT() {
     }
 }
 
+// ==== MQTT Callback Function ====
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    // No incoming MQTT message handling needed
 }
