@@ -24,13 +24,18 @@
 #define TX_PIN 1
 #define RX_PIN 3
 
+// Flag to toggle MQTT
+bool mqttEnabled = false;
+
+
+
 // ==== Global Variables ====
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
 // MQTT server info
-const char* mqttServer = "152.....";
+const char* mqttServer = "152.xxxxx8";
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
@@ -38,12 +43,11 @@ const char* mqttTopic = "weather/data/WS80_Lora";
 
 int windDir = 0;
 float windSpeed = 0.0, windGust = 0.0, temperature = 0.0, humidity = 0.0, batVoltage = 0.0;
-#define WIND_SPEED_UNIT "knt"
+#define WIND_SPEED_UNIT "ms"
 
 String receivedPacket = "";
 
-// Flag to toggle MQTT
-bool mqttEnabled = false;
+
 
 // ==== FUNCTION DECLARATIONS ====
 void mqttCallback(char* topic, byte* payload, unsigned int length);
@@ -153,9 +157,11 @@ void displayData(bool mqttEnabled) {
     display.setCursor(0, 30);
     display.printf("WindDir: %d\n", windDir);
     display.setCursor(0, 42);
-    display.printf("Temp: %.1f C\n", temperature);
+    display.printf("temp:%.1fC\n", temperature);
+    display.setCursor(60, 42);
+    display.printf(" humi:%.0f %%\n", humidity);
     display.setCursor(60, 55);
-    display.printf("Bat: %.2f V\n", batVoltage);
+    display.printf(" bat:%.2f V\n", batVoltage);
     display.setCursor(0, 55);
     display.printf("MQTT: %s\n", mqttEnabled ? "ON" : "OFF");
     display.display();
