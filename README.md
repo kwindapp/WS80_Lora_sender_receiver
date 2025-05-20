@@ -7,7 +7,7 @@ WS80,85,90 Ultrasonic LoraWan Cubecell version  https://github.com/tavdog/Cubece
 
 WS80,85,90 Ultrasonic LoraWan RAK4630 https://github.com/tavdog/RAK4631-WS8X-Helium-WX.git
 
-Network https://get.kwind.app/wind-stations // MQTT and LoraWan Console forward data to Windguru possible from Kwind Backend
+Network https://get.kwind.app/wind-stations // MQTT and LoraWan Console - forward data to Windguru possible from Kwind Backend
 
 ![IMG_0782](https://github.com/user-attachments/assets/38dfa29a-b5c0-4990-8d37-a03ea241c1fb)
 
