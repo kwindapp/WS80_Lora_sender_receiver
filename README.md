@@ -1,7 +1,7 @@
 Lilygo Wifi Lora ESP32
 sender receiver lilygo.v2.1 ! 1.6.1
 
-Uart WS80 check ESP now repo ... 10 min work you need a 10K ohm resistor and a soldering iron 
+Uart WS80 check ESP now repo ... 10 min work you need a 10K ohm resistor and a soldering iron (WS80 Station 50 Euros)
 
 LoraWan Cubecell version  https://github.com/tavdog/Cubecell-WS8X-Helium-WX
 
